@@ -1,0 +1,1223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Student Schedule Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  
+  <!-- Firebase SDKs (Compat version for direct browser execution) -->
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+
+  <style>
+    :root {
+      --primary: #3b82f6;
+      --primary-hover: #2563eb;
+      --bg: #0f172a;
+      --card-bg: #1e293b;
+      --card-border: #334155;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+      --accent: #38bdf8;
+      --table-header: #5b9bd5;
+      --table-header-border: #7eb2e6;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 20px 16px;
+    }
+
+    .container {
+      max-width: 1300px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+
+    /* Auth Bar */
+    .auth-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      padding: 12px 18px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .auth-fields {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .auth-input {
+      background: #0b1120;
+      border: 1px solid var(--card-border);
+      border-radius: 6px;
+      color: var(--text);
+      padding: 6px 10px;
+      font-size: 0.8rem;
+    }
+
+    .auth-input:focus { outline: 2px solid var(--accent); }
+
+    .user-pill {
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: var(--accent);
+    }
+
+    /* Live Header Tracker */
+    .tracker-card {
+      background: linear-gradient(135deg, rgba(30, 41, 59, 0.95), rgba(15, 23, 42, 0.98));
+      border: 1px solid var(--card-border);
+      border-radius: 14px;
+      padding: 18px 22px;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.35);
+    }
+
+    .tracker-left { display: flex; flex-direction: column; gap: 4px; }
+    .badge-row { display: flex; align-items: center; gap: 10px; }
+
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 9px;
+      border-radius: 9999px;
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .badge-in-class {
+      background: rgba(16, 185, 129, 0.15);
+      color: #34d399;
+      border: 1px solid rgba(16, 185, 129, 0.3);
+    }
+
+    .badge-passing {
+      background: rgba(245, 158, 11, 0.15);
+      color: #fbbf24;
+      border: 1px solid rgba(245, 158, 11, 0.3);
+    }
+
+    .badge-out {
+      background: rgba(148, 163, 184, 0.15);
+      color: #cbd5e1;
+      border: 1px solid rgba(148, 163, 184, 0.3);
+    }
+
+    .pulse-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: currentColor;
+      animation: pulse 1.8s infinite;
+    }
+
+    @keyframes pulse {
+      0% { transform: scale(0.9); opacity: 0.6; }
+      50% { transform: scale(1.3); opacity: 1; }
+      100% { transform: scale(0.9); opacity: 0.6; }
+    }
+
+    .current-class-title { font-size: 1.35rem; font-weight: 800; letter-spacing: -0.02em; }
+    .current-class-detail { font-size: 0.85rem; color: var(--text-muted); }
+    .tracker-right { display: flex; align-items: center; gap: 20px; }
+    .timer-display { display: flex; flex-direction: column; align-items: flex-end; }
+
+    .time-left-val {
+      font-family: monospace;
+      font-size: 2.1rem;
+      font-weight: 800;
+      line-height: 1;
+      color: var(--text);
+    }
+
+    .time-left-label {
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      font-weight: 600;
+      margin-top: 3px;
+    }
+
+    .schedule-toggle {
+      display: flex;
+      background: #0b1120;
+      padding: 3px;
+      border-radius: 8px;
+      border: 1px solid var(--card-border);
+    }
+
+    .toggle-btn {
+      padding: 6px 14px;
+      border: none;
+      background: transparent;
+      color: var(--text-muted);
+      font-size: 0.8rem;
+      font-weight: 700;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .toggle-btn.active { background: var(--primary); color: #fff; }
+
+    /* Controls Panel */
+    .controls-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      padding: 14px 18px;
+    }
+
+    .controls-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .controls-title-wrap { display: flex; align-items: center; gap: 10px; }
+    .controls-title { font-size: 0.92rem; font-weight: 700; color: var(--text); }
+
+    .storage-indicator {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 0.72rem;
+      font-weight: 600;
+      padding: 2px 7px;
+      border-radius: 6px;
+      background: rgba(56, 189, 248, 0.12);
+      color: #38bdf8;
+      border: 1px solid rgba(56, 189, 248, 0.25);
+    }
+
+    .paste-box {
+      width: 100%;
+      height: 110px;
+      background: #0b1120;
+      border: 1px solid var(--card-border);
+      border-radius: 8px;
+      color: var(--text);
+      padding: 10px;
+      font-family: monospace;
+      font-size: 0.78rem;
+      margin-top: 10px;
+      resize: vertical;
+    }
+
+    .paste-box:focus { outline: 2px solid var(--accent); border-color: transparent; }
+    .btn-row { display: flex; gap: 10px; margin-top: 10px; flex-wrap: wrap; }
+
+    .btn {
+      padding: 8px 16px;
+      border: none;
+      border-radius: 8px;
+      font-size: 0.82rem;
+      font-weight: 700;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.15s ease-in-out;
+    }
+
+    .btn-primary { background: var(--primary); color: white; }
+    .btn-primary:hover { background: var(--primary-hover); }
+    .btn-secondary { background: #334155; color: #f1f5f9; }
+    .btn-secondary:hover { background: #475569; }
+    .btn-print { background: #059669; color: white; }
+    .btn-print:hover { background: #047857; }
+
+    /* Main Schedule Grid */
+    .schedule-wrap {
+      overflow-x: auto;
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
+    }
+
+    .schedule-table {
+      width: 100%;
+      border-collapse: collapse;
+      table-layout: fixed;
+      min-width: 900px;
+    }
+
+    .schedule-table th {
+      background: var(--table-header);
+      color: white;
+      font-weight: 800;
+      font-size: 0.86rem;
+      padding: 12px 6px;
+      text-align: center;
+      border: 1px solid var(--table-header-border);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .schedule-table th.time-col { width: 14%; }
+
+    .schedule-table td {
+      border: 1px solid #d1d5db;
+      padding: 3px;
+      text-align: center;
+      vertical-align: middle;
+      height: 72px;
+      background: #f8fafc;
+    }
+
+    .period-label {
+      background: var(--table-header) !important;
+      color: white;
+      font-weight: 800;
+      padding: 6px 4px !important;
+      border: 1px solid var(--table-header-border) !important;
+    }
+
+    .period-id { font-size: 1.15rem; font-weight: 800; line-height: 1; }
+    .period-time { font-size: 0.72rem; opacity: 0.95; margin-top: 4px; font-weight: 600; line-height: 1.2; }
+
+    /* Course Blocks and Split Cell Styling */
+    .single-cell {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      height: 100%;
+      width: 100%;
+      border-radius: 6px;
+      padding: 4px 6px;
+    }
+
+    .split-container {
+      display: flex;
+      flex-direction: column;
+      width: 100%;
+      height: 100%;
+      border-radius: 6px;
+      overflow: hidden;
+    }
+
+    .split-half {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      padding: 3px 4px;
+      width: 100%;
+    }
+
+    .split-half:not(:last-child) { border-bottom: 1px solid rgba(0, 0, 0, 0.12); }
+    .course-title { font-weight: 800; font-size: 0.8rem; line-height: 1.15; color: #1e293b; }
+    .split-half .course-title { font-size: 0.74rem; }
+    .course-room { font-size: 0.7rem; color: #475569; font-weight: 700; margin-top: 1px; line-height: 1.1; }
+    .split-half .course-room { font-size: 0.65rem; }
+    .course-teacher { font-size: 0.66rem; color: #64748b; line-height: 1.1; }
+    .split-half .course-teacher { font-size: 0.62rem; }
+
+    .cycle-badge {
+      position: absolute;
+      top: 3px;
+      right: 4px;
+      font-size: 0.62rem;
+      background: rgba(15, 23, 42, 0.65);
+      color: #f8fafc;
+      padding: 1px 5px;
+      border-radius: 9999px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      pointer-events: none;
+    }
+
+    .cell-rotator {
+      position: relative;
+      cursor: pointer;
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    .cell-rotator:hover { filter: brightness(0.97); }
+    .fade-switch { animation: cellFadeIn 0.35s ease-in-out; }
+
+    @keyframes cellFadeIn {
+      from { opacity: 0.35; transform: scale(0.98); }
+      to { opacity: 1; transform: scale(1); }
+    }
+
+    .active-slot {
+      outline: 3px solid #2563eb !important;
+      outline-offset: -3px;
+      box-shadow: inset 0 0 10px rgba(37, 99, 235, 0.35);
+    }
+
+    /* Course Colors */
+    .c-english { background-color: #dbeafe !important; }
+    .c-chem { background-color: #dcfce7 !important; }
+    .c-spanish { background-color: #ffedd5 !important; }
+    .c-lunch { background-color: #fef3c7 !important; }
+    .c-history { background-color: #ffe4e6 !important; }
+    .c-gym { background-color: #fce7f3 !important; }
+    .c-math { background-color: #e0e7ff !important; }
+    .c-cad { background-color: #cffafe !important; }
+    .c-study { background-color: #f1f5f9 !important; }
+    .c-homeroom { background-color: #e2e8f0 !important; }
+    .c-art { background-color: #ede9fe !important; }
+    .c-nano { background-color: #f3e8ff !important; }
+    .c-club { background-color: #e0f2fe !important; }
+    .c-default { background-color: #f8fafc !important; }
+
+    #printContainer { display: none; }
+
+    @media print {
+      body { background: white !important; color: black !important; padding: 0 !important; margin: 0 !important; }
+      .no-print { display: none !important; }
+      #printContainer { display: block !important; padding: 10px; background: white; }
+      .print-page-break { page-break-before: always; margin-top: 24px; }
+      .print-title { font-size: 1.15rem; font-weight: 800; margin-bottom: 8px; color: #1e293b; text-align: center; }
+      .schedule-table th, .period-label { background-color: #5b9bd5 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .c-english, .c-chem, .c-spanish, .c-lunch, .c-history, .c-gym,
+      .c-math, .c-cad, .c-study, .c-homeroom, .c-art, .c-nano, .c-club, .c-default {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+    }
+  </style>
+</head>
+<body>
+
+<div class="container no-print">
+  <!-- Account Bar -->
+  <div class="auth-card">
+    <div id="authSignedOut" class="auth-fields">
+      <input type="email" id="authEmail" class="auth-input" placeholder="Email">
+      <input type="password" id="authPassword" class="auth-input" placeholder="Password">
+      <button class="btn btn-primary" onclick="handleSignIn()">Log In</button>
+      <button class="btn btn-secondary" onclick="handleSignUp()">Sign Up</button>
+    </div>
+    <div id="authSignedIn" class="auth-fields" style="display: none;">
+      <span class="user-pill" id="userEmailDisplay">Logged in</span>
+      <button class="btn btn-secondary" onclick="handleSignOut()">Log Out</button>
+    </div>
+    <span id="saveStatusIndicator" class="storage-indicator">💾 Browser Storage</span>
+  </div>
+
+  <!-- Live Status Tracker -->
+  <div class="tracker-card">
+    <div class="tracker-left">
+      <div class="badge-row">
+        <span id="liveStatusBadge" class="status-badge badge-out">
+          <span class="pulse-dot"></span>
+          <span id="liveStatusText">Out of Session</span>
+        </span>
+        <span id="currentDateDisplay" style="font-size: 0.8rem; color: var(--text-muted); font-weight: 600;"></span>
+      </div>
+      <div id="liveCurrentClass" class="current-class-title">No Active Class</div>
+      <div id="liveSubText" class="current-class-detail">Sign in to sync your schedule across devices</div>
+    </div>
+
+    <div class="tracker-right">
+      <div class="timer-display">
+        <div id="liveTimer" class="time-left-val">--:--</div>
+        <div id="liveTimerLabel" class="time-left-label">Time Remaining</div>
+      </div>
+      <div class="schedule-toggle">
+        <button id="btnFullDay" class="toggle-btn active" onclick="setMode('full')">Full Day</button>
+        <button id="btnHalfDay" class="toggle-btn" onclick="setMode('half')">Half Day</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Input Panel -->
+  <div class="controls-card">
+    <div class="controls-header" onclick="togglePasteArea()">
+      <div class="controls-title-wrap">
+        <div class="controls-title">PowerSchool Data Input</div>
+      </div>
+      <span id="toggleIcon" style="font-size: 0.8rem; color: var(--text-muted); font-weight: 700;">▲ Hide</span>
+    </div>
+    <div id="pasteContainer">
+      <textarea id="powerschoolInput" class="paste-box" placeholder="Copy your full PowerSchool attendance / schedule table and paste here..."></textarea>
+      <div class="btn-row">
+        <button class="btn btn-primary" onclick="parseAndGenerate()">Generate & Save Schedule</button>
+        <button class="btn btn-print" onclick="printSchedule()">Print / Save PDF</button>
+        <button class="btn btn-secondary" onclick="clearSchedule()">Clear Saved Data</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Interactive Timetable -->
+  <div class="schedule-wrap">
+    <table class="schedule-table">
+      <thead>
+        <tr>
+          <th class="time-col">Period & Bell</th>
+          <th>Monday</th>
+          <th>Tuesday</th>
+          <th>Wednesday</th>
+          <th>Thursday</th>
+          <th>Friday</th>
+        </tr>
+      </thead>
+      <tbody id="scheduleBody"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Print Container for Full and Half Day PDF Export -->
+<div id="printContainer">
+  <div class="print-title">Full Day Schedule (8:00 AM – 4:10 PM)</div>
+  <table class="schedule-table" style="margin-bottom: 20px;">
+    <thead>
+      <tr>
+        <th class="time-col">Period & Bell</th>
+        <th>Monday</th>
+        <th>Tuesday</th>
+        <th>Wednesday</th>
+        <th>Thursday</th>
+        <th>Friday</th>
+      </tr>
+    </thead>
+    <tbody id="printFullBody"></tbody>
+  </table>
+
+  <div class="print-page-break"></div>
+
+  <div class="print-title">Half Day Schedule (8:00 AM – 12:30 PM)</div>
+  <table class="schedule-table">
+    <thead>
+      <tr>
+        <th class="time-col">Period & Bell</th>
+        <th>Monday</th>
+        <th>Tuesday</th>
+        <th>Wednesday</th>
+        <th>Thursday</th>
+        <th>Friday</th>
+      </tr>
+    </thead>
+    <tbody id="printHalfBody"></tbody>
+  </table>
+</div>
+
+<script>
+  // --- FIREBASE CONFIGURATION & INITIALIZATION ---
+  const firebaseConfig = {
+    apiKey: "AIzaSyArm1z9r_z0kLPztqTajOJp-xEXXeZAPRs",
+    authDomain: "bcaschedule-904b3.firebaseapp.com",
+    projectId: "bcaschedule-904b3",
+    storageBucket: "bcaschedule-904b3.firebasestorage.app",
+    messagingSenderId: "441701647885",
+    appId: "1:441701647885:web:0d885be45a9e74aeb13744",
+    measurementId: "G-XEEVJTG1RE"
+  };
+
+  firebase.initializeApp(firebaseConfig);
+  const auth = firebase.auth();
+  const db = firebase.firestore();
+
+  let currentUser = null;
+
+  // --- SCHEDULE CONSTANTS & STATE ---
+  const PERIODS = [
+    { id: '1', name: 'Period 1', full: '8:00 AM – 8:50 AM', half: '8:00 AM – 8:25 AM', fs: 480, fe: 530, hs: 480, he: 505 },
+    { id: 'HR', name: 'Homeroom', full: '8:54 AM – 8:58 AM', half: '8:29 AM – 8:38 AM', fs: 534, fe: 538, hs: 509, he: 518 },
+    { id: '2', name: 'Period 2', full: '9:02 AM – 9:52 AM', half: '8:42 AM – 9:07 AM', fs: 542, fe: 592, hs: 522, he: 547 },
+    { id: '3', name: 'Period 3', full: '9:56 AM – 10:46 AM', half: '9:11 AM – 9:36 AM', fs: 596, fe: 646, hs: 551, he: 576 },
+    { id: '4', name: 'Period 4', full: '10:50 AM – 11:40 AM', half: '9:40 AM – 10:05 AM', fs: 650, fe: 700, hs: 580, he: 605 },
+    { id: '5', name: 'Period 5', full: '11:44 AM – 12:34 PM', half: '10:09 AM – 10:34 AM', fs: 704, fe: 754, hs: 609, he: 634 },
+    { id: '6', name: 'Period 6', full: '12:38 PM – 1:28 PM', half: '10:38 AM – 11:03 AM', fs: 758, fe: 808, hs: 638, he: 663 },
+    { id: '7', name: 'Period 7', full: '1:32 PM – 2:22 PM', half: '11:07 AM – 11:32 AM', fs: 812, fe: 862, hs: 667, he: 692 },
+    { id: '8', name: 'Period 8', full: '2:26 PM – 3:16 PM', half: '11:36 AM – 12:01 PM', fs: 866, fe: 916, hs: 696, he: 721 },
+    { id: '9', name: 'Period 9', full: '3:20 PM – 4:10 PM', half: '12:05 PM – 12:30 PM', fs: 920, fe: 970, hs: 725, he: 750 }
+  ];
+
+  const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
+  let currentScheduleMode = 'full';
+  let scheduleData = {};
+  let cycleState = {};
+  let cycleInterval = null;
+
+  // --- AUTH MANAGEMENT ---
+  auth.onAuthStateChanged(async (user) => {
+    currentUser = user;
+    if (user) {
+      document.getElementById('authSignedOut').style.display = 'none';
+      document.getElementById('authSignedIn').style.display = 'flex';
+      document.getElementById('userEmailDisplay').textContent = user.email;
+      await loadFromCloud(user.uid);
+    } else {
+      document.getElementById('authSignedOut').style.display = 'flex';
+      document.getElementById('authSignedIn').style.display = 'none';
+      loadFromLocalStorage();
+    }
+    renderSchedule();
+    renderPrintSchedule();
+    updateLiveTracker();
+  });
+
+  async function handleSignUp() {
+    const email = document.getElementById('authEmail').value.trim();
+    const pass = document.getElementById('authPassword').value;
+    if (!email || !pass) return alert('Please enter both email and password.');
+    try {
+      await auth.createUserWithEmailAndPassword(email, pass);
+    } catch (err) {
+      alert(`Sign up error: ${err.message}`);
+    }
+  }
+
+  async function handleSignIn() {
+    const email = document.getElementById('authEmail').value.trim();
+    const pass = document.getElementById('authPassword').value;
+    if (!email || !pass) return alert('Please enter both email and password.');
+    try {
+      await auth.signInWithEmailAndPassword(email, pass);
+    } catch (err) {
+      alert(`Sign in error: ${err.message}`);
+    }
+  }
+
+  async function handleSignOut() {
+    try {
+      await auth.signOut();
+      initEmptySchedule();
+      document.getElementById('powerschoolInput').value = '';
+      renderSchedule();
+      renderPrintSchedule();
+      updateLiveTracker();
+    } catch (err) {
+      alert(`Sign out error: ${err.message}`);
+    }
+  }
+
+  // --- DATA STORAGE LOGIC ---
+  function initEmptySchedule() {
+    scheduleData = {};
+    cycleState = {};
+    PERIODS.forEach(p => {
+      scheduleData[p.id] = {};
+      DAYS.forEach(d => {
+        scheduleData[p.id][d] = [];
+      });
+    });
+  }
+
+  async function saveSchedule() {
+    const raw = document.getElementById('powerschoolInput').value;
+
+    if (currentUser) {
+      try {
+        await db.collection('users').doc(currentUser.uid).set({
+          scheduleData: JSON.stringify(scheduleData),
+          rawInput: raw,
+          scheduleMode: currentScheduleMode,
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        flashSaveIndicator('Saved to Cloud');
+      } catch (err) {
+        console.error('Cloud save failed:', err);
+        flashSaveIndicator('Cloud Save Error');
+      }
+    } else {
+      localStorage.setItem('ps_schedule_data', JSON.stringify(scheduleData));
+      localStorage.setItem('ps_raw_input', raw);
+      localStorage.setItem('ps_schedule_mode', currentScheduleMode);
+      flashSaveIndicator('Saved Locally');
+    }
+  }
+
+  async function loadFromCloud(uid) {
+    try {
+      const doc = await db.collection('users').doc(uid).get();
+      if (doc.exists) {
+        const data = doc.data();
+        if (data.scheduleData) scheduleData = JSON.parse(data.scheduleData);
+        if (data.rawInput) document.getElementById('powerschoolInput').value = data.rawInput;
+        if (data.scheduleMode) {
+          currentScheduleMode = data.scheduleMode;
+          document.getElementById('btnFullDay').classList.toggle('active', data.scheduleMode === 'full');
+          document.getElementById('btnHalfDay').classList.toggle('active', data.scheduleMode === 'half');
+        }
+        flashSaveIndicator('Loaded from Cloud');
+      } else {
+        initEmptySchedule();
+      }
+    } catch (err) {
+      console.error('Cloud load failed:', err);
+    }
+  }
+
+  function loadFromLocalStorage() {
+    const savedMode = localStorage.getItem('ps_schedule_mode');
+    if (savedMode) {
+      currentScheduleMode = savedMode;
+      document.getElementById('btnFullDay').classList.toggle('active', savedMode === 'full');
+      document.getElementById('btnHalfDay').classList.toggle('active', savedMode === 'half');
+    }
+
+    const savedRaw = localStorage.getItem('ps_raw_input');
+    if (savedRaw) {
+      document.getElementById('powerschoolInput').value = savedRaw;
+    }
+
+    const savedSchedule = localStorage.getItem('ps_schedule_data');
+    if (savedSchedule) {
+      try {
+        scheduleData = JSON.parse(savedSchedule);
+      } catch (e) {
+        initEmptySchedule();
+      }
+    } else {
+      initEmptySchedule();
+    }
+  }
+
+  function flashSaveIndicator(msg) {
+    const el = document.getElementById('saveStatusIndicator');
+    if (!el) return;
+    el.textContent = `✓ ${msg}`;
+    el.style.opacity = '1';
+    clearTimeout(el._timer);
+    el._timer = setTimeout(() => {
+      el.textContent = currentUser ? '☁️ Cloud Active' : '💾 Browser Storage';
+    }, 2500);
+  }
+
+  function setMode(mode) {
+    currentScheduleMode = mode;
+    document.getElementById('btnFullDay').classList.toggle('active', mode === 'full');
+    document.getElementById('btnHalfDay').classList.toggle('active', mode === 'half');
+    saveSchedule();
+    renderSchedule();
+    updateLiveTracker();
+  }
+
+  function togglePasteArea() {
+    const el = document.getElementById('pasteContainer');
+    const icon = document.getElementById('toggleIcon');
+    const isHidden = el.style.display === 'none';
+    el.style.display = isHidden ? 'block' : 'none';
+    icon.textContent = isHidden ? '▲ Hide' : '▼ Show';
+  }
+
+  // --- PARSING & CLASSIFICATION ---
+  function getCourseClass(courseName) {
+    const c = (courseName || '').toLowerCase();
+    if (c.includes('english')) return 'c-english';
+    if (c.includes('chem')) return 'c-chem';
+    if (c.includes('espanol') || c.includes('spanish')) return 'c-spanish';
+    if (c.includes('lunch')) return 'c-lunch';
+    if (c.includes('world') || c.includes('history')) return 'c-history';
+    if (c.includes('pe') || c.includes('health') || c.includes('gym')) return 'c-gym';
+    if (c.includes('math') || c.includes('algebra') || c.includes('analysis')) return 'c-math';
+    if (c.includes('cad') || c.includes('design') || c.includes('electronics') || c.includes('maker')) return 'c-cad';
+    if (c.includes('study')) return 'c-study';
+    if (c.includes('homeroom') || c.includes('igs')) return 'c-homeroom';
+    if (c.includes('art') || c.includes('digital')) return 'c-art';
+    if (c.includes('nano')) return 'c-nano';
+    if (c.includes('club')) return 'c-club';
+    return 'c-default';
+  }
+
+  function cleanCourseTitle(title) {
+    if (!title) return 'Class';
+    let c = title
+      .replace(/\[\s*i\s*\]/gi, '')
+      .replace(/Not\s+available/gi, '')
+      .replace(/Show\s+details/gi, '')
+      .replace(/\b(POS|AU|AE|T|TE|TU)\b/gi, '')
+      .replace(/^[\s\.\-\_\:\~\t]+/, '')
+      .replace(/[\s\.\-\_\:\~\t]+$/, '')
+      .trim();
+
+    const lower = c.toLowerCase();
+    if (lower.includes('igs') || lower.includes('homeroom')) return 'Homeroom';
+    if (lower.includes('club')) return 'Insert Club';
+    if (lower.includes('computer assisted') || lower.includes('cad')) return 'CAD';
+    if (lower.includes('first-year') || lower.includes('seminar')) return 'First-Year Seminar';
+    if (lower.includes('digital imaging')) return 'Digital Art';
+    if (lower.includes('art fundamentals')) return 'Art Fundamentals';
+    if (lower.includes('health')) return 'Health Wellness';
+    if (lower.includes('pe [09]') || lower.includes('pe 09') || lower.includes('fitness')) return 'PE [09]';
+    if (lower.includes('history')) return 'US & World Hist I';
+    if (lower.includes('math analysis')) return 'Math Analysis I';
+    if (lower.includes('espanol') || lower.includes('spanish')) return 'Español II';
+    if (lower.includes('nano')) return 'Nano';
+    if (lower.includes('chemistry')) return 'Chemistry - AEDT';
+    if (lower.includes('english')) return 'English 9';
+    if (lower.includes('study hall') || lower.includes('study')) return 'Study Hall';
+    if (lower.includes('lunch')) return 'Lunch Grade 09';
+    return c || 'Class';
+  }
+
+  function parseDays(dayStr) {
+    let dUpper = dayStr.toUpperCase().replace(/\s+/g, '');
+    dUpper = dUpper.replace(/([MTWRHF])-([MTWRHF])([MTWRHF])/g, '$1-$2,$3');
+    dUpper = dUpper.replace(/\./g, ',');
+    
+    const res = new Set();
+    const map = { 'M': 'Monday', 'T': 'Tuesday', 'W': 'Wednesday', 'R': 'Thursday', 'H': 'Thursday', 'F': 'Friday' };
+    const parts = dUpper.split(',');
+    
+    parts.forEach(pt => {
+      const dash = pt.split('-');
+      if (dash.length === 2) {
+        const order = ['M', 'T', 'W', 'R', 'F'];
+        let s = dash[0] === 'H' ? 'R' : dash[0];
+        let e = dash[1] === 'H' ? 'R' : dash[1];
+        let iStart = order.indexOf(s);
+        let iEnd = order.indexOf(e);
+        if (iStart !== -1 && iEnd !== -1 && iStart <= iEnd) {
+          for (let i = iStart; i <= iEnd; i++) res.add(map[order[i]]);
+        }
+      } else {
+        for (let ch of pt) {
+          if (map[ch]) res.add(map[ch]);
+        }
+      }
+    });
+    return Array.from(res);
+  }
+
+  function parseAndGenerate() {
+    const rawText = document.getElementById('powerschoolInput').value;
+    if (!rawText.trim()) return;
+
+    initEmptySchedule();
+    const lines = rawText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+
+    const emailIndices = [];
+    for (let i = 0; i < lines.length; i++) {
+      if (/Email\s+/i.test(lines[i])) {
+        emailIndices.push(i);
+      }
+    }
+
+    for (let idx = 0; idx < emailIndices.length; idx++) {
+      const eIdx = emailIndices[idx];
+      const prevEIdx = idx === 0 ? -1 : emailIndices[idx - 1];
+      const emailLine = lines[eIdx];
+
+      let teacher = '';
+      const tMatch = emailLine.match(/Email\s+([^-\n\t]+)/i);
+      if (tMatch) {
+        let t = tMatch[1].trim();
+        t = t.replace(/\s+[A-F][+-]?\s*$/, '').trim();
+        if (t.includes(',')) {
+          const parts = t.split(',');
+          const last = parts[0].trim();
+          const first = parts[1].trim().charAt(0);
+          teacher = first ? `${last}, ${first}.` : last;
+        } else {
+          teacher = t;
+        }
+      }
+
+      let room = '';
+      const rmInline = emailLine.match(/Rm:\s*([^\s\[\]]+)/i);
+      if (rmInline) {
+        room = rmInline[1];
+      } else {
+        for (let k = eIdx + 1; k < Math.min(lines.length, eIdx + 4); k++) {
+          const l = lines[k];
+          if (/Email/i.test(l)) break;
+          const directMatch = l.match(/^(Cafe\s*2Flr|Gym[A-Z]?|[0-9]{2,4}[A-Z]?)$/i);
+          if (directMatch) {
+            room = directMatch[1];
+            break;
+          }
+        }
+        if (!room) {
+          for (let k = eIdx; k < Math.min(lines.length, eIdx + 4); k++) {
+            if (lines[k] === '- Rm:' || lines[k] === 'Rm:' || lines[k] === '- Rm') {
+              if (k + 1 < lines.length) {
+                room = lines[k + 1].trim();
+                break;
+              }
+            }
+          }
+        }
+      }
+
+      const periodList = [];
+      let detectedCourse = '';
+
+      for (let j = prevEIdx + 1; j <= eIdx; j++) {
+        const line = lines[j];
+
+        const expMatches = line.match(/(?:^|[\s\t\(\.0-9])(HR|\d)\(([M\vert{}T\vert{}W\vert{}R\vert{}H\vert{}F\vert{}\-\vert{},\vert{}\.\vert{}\s]+)\)/gi);
+        if (expMatches) {
+          expMatches.forEach(em => {
+            const m = em.match(/(HR|\d)\(([M\vert{}T\vert{}W\vert{}R\vert{}H\vert{}F\vert{}\-\vert{},\vert{}\.\vert{}\s]+)\)/i);
+            if (m) {
+              const pId = m[1].toUpperCase();
+              const days = parseDays(m[2]);
+              periodList.push({ period: pId, days: days });
+            }
+          });
+        }
+
+        let cleanLine = line.replace(/(?:^|[\s\t\(\.0-9])(HR|\d)\(([M\vert{}T\vert{}W\vert{}R\vert{}H\vert{}F\vert{}\-\vert{},\vert{}\.\vert{}\s]+)\)/gi, ' ');
+        cleanLine = cleanLine.replace(/Email\s+.*$/i, ' ');
+        cleanLine = cleanLine.replace(/\b(POS|AU|AE|SEA|T|TE|TU|HU|HE|ER|HIP|MA|FT|CT|DT|STC|ISS|OSS|CAE|SAP|AR|CV|SD)\b/gi, ' ');
+        cleanLine = cleanLine.replace(/Not\s+available/gi, ' ');
+        cleanLine = cleanLine.replace(/Show\s+details/gi, ' ');
+        cleanLine = cleanLine.replace(/\[\s*i\s*\]/gi, ' ');
+        cleanLine = cleanLine.replace(/-\s*Rm:.*$/gi, ' ');
+        cleanLine = cleanLine.replace(/Rm:.*$/gi, ' ');
+        cleanLine = cleanLine.replace(/\b[0-9]+(\.[0-9]+)?\b/g, ' ');
+        cleanLine = cleanLine.replace(/[~_\.\-\t]/g, ' ');
+        cleanLine = cleanLine.trim();
+
+        if (cleanLine.length > 2 && !/^(Cafe\s*2Flr|Gym[A-Z]?|[0-9]{2,4}[A-Z]?)$/i.test(cleanLine)) {
+          if (!/^[A-F][+-]?$/i.test(cleanLine)) {
+            detectedCourse = cleanLine;
+          }
+        }
+      }
+
+      if (periodList.length > 0) {
+        const finalCourseName = cleanCourseTitle(detectedCourse);
+        const cleanRm = room ? (room.toLowerCase().startsWith('rm') ? room : `Rm: ${room}`) : '';
+
+        periodList.forEach(pItem => {
+          pItem.days.forEach(day => {
+            if (scheduleData[pItem.period] && scheduleData[pItem.period][day]) {
+              const exists = scheduleData[pItem.period][day].some(
+                x => x.title === finalCourseName && x.room === cleanRm && x.teacher === teacher
+              );
+              if (!exists) {
+                scheduleData[pItem.period][day].push({
+                  title: finalCourseName,
+                  room: cleanRm,
+                  teacher: teacher
+                });
+              }
+            }
+          });
+        });
+      }
+    }
+
+    saveSchedule();
+    renderSchedule();
+    renderPrintSchedule();
+    updateLiveTracker();
+    startRotatingMultiClasses();
+  }
+
+  function createWebCellHTML(periodId, day, classes) {
+    if (!classes || classes.length === 0) {
+      return '<span style="color: #cbd5e1; font-weight: 600;">—</span>';
+    }
+
+    const key = `${periodId}-${day}`;
+    if (cycleState[key] === undefined) cycleState[key] = 0;
+    const activeIdx = cycleState[key] % classes.length;
+    const item = classes[activeIdx];
+    const colorCls = getCourseClass(item.title);
+
+    const isMultiple = classes.length > 1;
+    const badgeHTML = isMultiple 
+      ? `<div class="cycle-badge">${activeIdx + 1}/${classes.length} ↻</div>` 
+      : '';
+
+    return `
+      <div class="single-cell cell-rotator ${colorCls} fade-switch" onclick="handleCellClick('${periodId}', '${day}')">
+        ${badgeHTML}
+        <div class="course-title">${item.title}</div>
+        ${item.room ? `<div class="course-room">${item.room}</div>` : ''}
+        ${item.teacher ? `<div class="course-teacher">${item.teacher}</div>` : ''}
+      </div>
+    `;
+  }
+
+  function createPrintCellHTML(classes) {
+    if (!classes || classes.length === 0) {
+      return '<span style="color: #cbd5e1; font-weight: 600;">—</span>';
+    }
+
+    if (classes.length === 1) {
+      const item = classes[0];
+      const colorCls = getCourseClass(item.title);
+      return `
+        <div class="single-cell ${colorCls}">
+          <div class="course-title">${item.title}</div>
+          ${item.room ? `<div class="course-room">${item.room}</div>` : ''}
+          ${item.teacher ? `<div class="course-teacher">${item.teacher}</div>` : ''}
+        </div>
+      `;
+    }
+
+    let halves = '';
+    classes.forEach(item => {
+      const colorCls = getCourseClass(item.title);
+      halves += `
+        <div class="split-half ${colorCls}">
+          <div class="course-title">${item.title}</div>
+          ${item.room ? `<div class="course-room">${item.room}</div>` : ''}
+          ${item.teacher ? `<div class="course-teacher">${item.teacher}</div>` : ''}
+        </div>
+      `;
+    });
+
+    return `<div class="split-container">${halves}</div>`;
+  }
+
+  function handleCellClick(periodId, day) {
+    const list = (scheduleData[periodId] && scheduleData[periodId][day]) || [];
+    if (list.length > 1) {
+      const key = `${periodId}-${day}`;
+      cycleState[key] = ((cycleState[key] || 0) + 1) % list.length;
+      const td = document.getElementById(`cell-${periodId}-${day}`);
+      if (td) {
+        td.innerHTML = createWebCellHTML(periodId, day, list);
+      }
+    }
+  }
+
+  function startRotatingMultiClasses() {
+    if (cycleInterval) clearInterval(cycleInterval);
+    cycleInterval = setInterval(() => {
+      let anyMultiple = false;
+      PERIODS.forEach(p => {
+        DAYS.forEach(day => {
+          const list = (scheduleData[p.id] && scheduleData[p.id][day]) || [];
+          if (list.length > 1) {
+            anyMultiple = true;
+            const key = `${p.id}-${day}`;
+            cycleState[key] = ((cycleState[key] || 0) + 1) % list.length;
+            const td = document.getElementById(`cell-${p.id}-${day}`);
+            if (td) {
+              td.innerHTML = createWebCellHTML(p.id, day, list);
+            }
+          }
+        });
+      });
+    }, 3500);
+  }
+
+  function renderSchedule() {
+    const tbody = document.getElementById('scheduleBody');
+    tbody.innerHTML = '';
+
+    PERIODS.forEach(p => {
+      const tr = document.createElement('tr');
+      const timeStr = currentScheduleMode === 'full' ? p.full : p.half;
+
+      const tdLabel = document.createElement('td');
+      tdLabel.className = 'period-label';
+      tdLabel.innerHTML = `<div class="period-id">${p.id}</div><div class="period-time">${timeStr}</div>`;
+      tr.appendChild(tdLabel);
+
+      DAYS.forEach(day => {
+        const td = document.createElement('td');
+        td.id = `cell-${p.id}-${day}`;
+        const list = (scheduleData[p.id] && scheduleData[p.id][day]) || [];
+        td.innerHTML = createWebCellHTML(p.id, day, list);
+        tr.appendChild(td);
+      });
+
+      tbody.appendChild(tr);
+    });
+  }
+
+  function renderPrintSchedule() {
+    const fullBody = document.getElementById('printFullBody');
+    const halfBody = document.getElementById('printHalfBody');
+    if (!fullBody || !halfBody) return;
+    fullBody.innerHTML = '';
+    halfBody.innerHTML = '';
+
+    PERIODS.forEach(p => {
+      const tr = document.createElement('tr');
+      const tdLabel = document.createElement('td');
+      tdLabel.className = 'period-label';
+      tdLabel.innerHTML = `<div class="period-id">${p.id}</div><div class="period-time">${p.full}</div>`;
+      tr.appendChild(tdLabel);
+
+      DAYS.forEach(day => {
+        const td = document.createElement('td');
+        const list = (scheduleData[p.id] && scheduleData[p.id][day]) || [];
+        td.innerHTML = createPrintCellHTML(list);
+        tr.appendChild(td);
+      });
+      fullBody.appendChild(tr);
+    });
+
+    PERIODS.forEach(p => {
+      const tr = document.createElement('tr');
+      const tdLabel = document.createElement('td');
+      tdLabel.className = 'period-label';
+      tdLabel.innerHTML = `<div class="period-id">${p.id}</div><div class="period-time">${p.half}</div>`;
+      tr.appendChild(tdLabel);
+
+      DAYS.forEach(day => {
+        const td = document.createElement('td');
+        const list = (scheduleData[p.id] && scheduleData[p.id][day]) || [];
+        td.innerHTML = createPrintCellHTML(list);
+        tr.appendChild(td);
+      });
+      halfBody.appendChild(tr);
+    });
+  }
+
+  function printSchedule() {
+    renderPrintSchedule();
+    window.print();
+  }
+
+  async function clearSchedule() {
+    if (cycleInterval) clearInterval(cycleInterval);
+
+    if (currentUser) {
+      try {
+        await db.collection('users').doc(currentUser.uid).delete();
+      } catch (e) {
+        console.error('Could not delete from cloud:', e);
+      }
+    } else {
+      localStorage.removeItem('ps_schedule_data');
+      localStorage.removeItem('ps_raw_input');
+      localStorage.removeItem('ps_schedule_mode');
+    }
+
+    document.getElementById('powerschoolInput').value = '';
+    initEmptySchedule();
+    renderSchedule();
+    renderPrintSchedule();
+    updateLiveTracker();
+    flashSaveIndicator('Data Cleared');
+  }
+
+  function updateLiveTracker() {
+    const now = new Date();
+    const dayIdx = now.getDay();
+    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const currentDay = dayNames[dayIdx];
+    const minutesNow = now.getHours() * 60 + now.getMinutes();
+    const secondsNow = now.getSeconds();
+
+    const dateDisplay = document.getElementById('currentDateDisplay');
+    if (dateDisplay) {
+      dateDisplay.textContent = now.toLocaleDateString(undefined, { 
+        weekday: 'short', month: 'short', day: 'numeric' 
+      });
+    }
+
+    document.querySelectorAll('.active-slot').forEach(el => el.classList.remove('active-slot'));
+
+    if (dayIdx < 1 || dayIdx > 5) {
+      setLiveCard('out', 'Weekend', 'School is out of session', '--:--', 'No Timer');
+      return;
+    }
+
+    const periods = PERIODS.map(p => ({
+      id: p.id,
+      name: p.name,
+      start: currentScheduleMode === 'full' ? p.fs : p.hs,
+      end: currentScheduleMode === 'full' ? p.fe : p.he
+    }));
+
+    for (let i = 0; i < periods.length; i++) {
+      const p = periods[i];
+      if (minutesNow >= p.start && minutesNow < p.end) {
+        const secRemaining = (p.end - minutesNow) * 60 - secondsNow;
+        const mm = String(Math.floor(secRemaining / 60)).padStart(2, '0');
+        const ss = String(secRemaining % 60).padStart(2, '0');
+
+        const classes = (scheduleData[p.id] && scheduleData[p.id][currentDay]) || [];
+        const currentCourse = classes.length > 0 ? classes.map(c => c.title).join(' / ') : 'Free / Open';
+        const sub = classes.length > 0 ? `${classes[0].room} • ${classes[0].teacher}` : 'No class scheduled';
+
+        setLiveCard('class', `${p.name}: ${currentCourse}`, sub, `${mm}:${ss}`, 'Class Remaining');
+
+        const cell = document.getElementById(`cell-${p.id}-${currentDay}`);
+        if (cell) cell.classList.add('active-slot');
+        return;
+      }
+    }
+
+    for (let i = 0; i < periods.length - 1; i++) {
+      const cur = periods[i];
+      const nxt = periods[i + 1];
+      if (minutesNow >= cur.end && minutesNow < nxt.start) {
+        const secRemaining = (nxt.start - minutesNow) * 60 - secondsNow;
+        const mm = String(Math.floor(secRemaining / 60)).padStart(2, '0');
+        const ss = String(secRemaining % 60).padStart(2, '0');
+
+        const nextClasses = (scheduleData[nxt.id] && scheduleData[nxt.id][currentDay]) || [];
+        const nextName = nextClasses.length > 0 ? nextClasses.map(c => c.title).join(' / ') : nxt.name;
+
+        setLiveCard('passing', `Passing Period → ${nxt.name}`, `Next: ${nextName}`, `${mm}:${ss}`, 'Passing Time');
+        return;
+      }
+    }
+
+    setLiveCard('out', 'Out of Session', 'Classes have ended for today', '--:--', 'No Timer');
+  }
+
+  function setLiveCard(type, title, sub, timer, timerLabel) {
+    const badge = document.getElementById('liveStatusBadge');
+    const badgeText = document.getElementById('liveStatusText');
+    const titleEl = document.getElementById('liveCurrentClass');
+    const subEl = document.getElementById('liveSubText');
+    const timerEl = document.getElementById('liveTimer');
+    const timerLabelEl = document.getElementById('liveTimerLabel');
+
+    if (!badge || !badgeText || !titleEl || !subEl || !timerEl || !timerLabelEl) return;
+
+    badge.className = 'status-badge';
+    if (type === 'class') {
+      badge.classList.add('badge-in-class');
+      badgeText.textContent = 'In Class';
+    } else if (type === 'passing') {
+      badge.classList.add('badge-passing');
+      badgeText.textContent = 'Passing Period';
+    } else {
+      badge.classList.add('badge-out');
+      badgeText.textContent = 'Out of Session';
+    }
+
+    titleEl.textContent = title;
+    subEl.textContent = sub;
+    timerEl.textContent = timer;
+    timerLabelEl.textContent = timerLabel;
+  }
+
+  // --- INITIALIZATION ON LOAD ---
+  initEmptySchedule();
+  renderSchedule();
+  renderPrintSchedule();
+  updateLiveTracker();
+  startRotatingMultiClasses();
+  setInterval(updateLiveTracker, 1000);
+</script>
+</body>
+</html>
